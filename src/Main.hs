@@ -10,17 +10,27 @@ import Util
 
 import BenchmarkUtil
 
+import System.Random
+
 --------------------------------------------------------------------------------
 
 main = do
---  let b1 = mkBitVector [False, False, True]
---  let b2 = mkBitVector [False, True, False]
---  putStrLn $ show $ b1 < b2
+--  let train = [mkBitVector [False, False], mkBitVector [True, False]]
+--  let test = mkBitVector [True, True]
+--  let rand = mkStdGen 0
+--  let ret = charikarLists (rand, 10) train 2 (1, test)
+--
+--  putStrLn $ show ret
 
-  text <- readFile "/home/eric/Dropbox/haskell/mlsh/data/iris.data"
+  text <- readFile "/home/eric/Dropbox/haskell/mlsh/data/breast_cancer.data"
   let vectors = dataToVectors text
 
-  let results = benchmarkLSH vectors
+--  let test = head vectors
+--  let train = tail vectors
+--
+--  let ret = rlshNNAuto l2Distance train (1, test)
+
+  let results = benchmark rlshNNAuto l2Distance vectors
 
   putStrLn $ show results
 

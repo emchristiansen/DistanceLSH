@@ -1,12 +1,4 @@
-module LSH (
-  BitVector,
-  mkBitVector,
-  CharikarList,
-  mkCharikarList,
-  mkRescoreNN,
-  nearestRescoreNN,
-  nearestRescoreNNAuto
-) where
+module LSH where
 
 --------------------------------------------------------------------------------
 
@@ -21,122 +13,73 @@ import Util
 
 --------------------------------------------------------------------------------
 
--- The default ordering should be lexicographic.
-data BitVector = BitVector (V.Vector Bool) deriving (Eq, Ord, Show)
+type CharikarListParamsStatic = StdGen
+type CharikarListsParamsStatic = (StdGen, NumPermutations)
+type CharikarParamsStatic = (StdGen, NumPermutations, Dimension)
+type LSHParamsQuery = Radius
+type RLSHParamsQuery = (Radius, NumRescore)
 
-mkBitVector :: [Bool] -> BitVector
-mkBitVector = BitVector . V.fromList
+type HNNResponse = [(Int, Int)]
 
--- Private constructor.
-data Permutation = Permutation [Int]
+type Dimension = Int
+type NumPermutations = Int
+type Radius = Int
+type NumRescore = Int
 
--- Verifies is actually a permutation.
-mkPermutation :: [Int] -> Permutation
-mkPermutation permutation =
-  assert(sorted == [0 .. length permutation]) $
-  Permutation permutation
-  where
-    sorted = sort permutation
+charikarList :: CharikarListParamsStatic -> [BitVector] -> LSHParamsQuery ->
+                NNQuery BitVector -> HNNResponse
+charikarList rand train radius (num, query) = sort $ zip distances indices
+ where
+  numBits' = numBits $ head train
+  permute' = permute (mkPermutationWithGen rand numBits')
+  sorted = V.fromList $ sort $ zip (map permute' train) [0 ..]
+  midpoint = binarySearch sorted (permute' query, -1)
+  neighbors = truncateSlice (midpoint - radius) (midpoint + radius + 1) sorted
+  (bitvectors, indices) = unzip $ V.toList $ neighbors
+  distances = map (hammingDistance query) bitvectors
 
-instance Metric BitVector where
-  distance (BitVector xs) (BitVector ys) =
-    assert ((V.length xs) == (V.length ys)) $
-    V.foldl incrementWhenDifferent 0 differ
-    where
-      incrementWhenDifferent count different =
-        count + if different then 1 else 0
-      differ = V.zipWith (/=) xs ys
+charikarLists :: CharikarListsParamsStatic -> [BitVector] -> LSHParamsQuery ->
+                 NNQuery BitVector -> HNNResponse
+charikarLists (rand, numPermutations) train radius (num, query) =
+ take num $ nub $ sort $ candidates
+ where rands = take numPermutations $ randList rand
+       lists = map (\r -> charikarList r train) rands
+       keepAll = 2 * radius + 1
+       query' = (keepAll, query)
+       candidates = concatMap (\l -> l radius query') lists
 
-permute :: Permutation -> BitVector -> BitVector
-permute (Permutation permutation) (BitVector bits) =
-  mkBitVector [bits V.! i | i <- permutation]
+lshNN :: CharikarParamsStatic -> Distance a -> [a] -> LSHParamsQuery ->
+         NNQuery a -> HNNResponse
+lshNN (rand, numPermutations, dimension) distance train radius (num, query) =
+ charikar
+ where
+  project point =
+   let randomSubset' = fst $ randomSubset rand (2 * dimension) train
+       (lefts, rights) = splitAt dimension randomSubset'
+       projection = zip lefts rights
+   in mkBitVector [distance point left < distance point right | (left, right) <- projection]
+  charikar =
+   let projected = map project train
+       projectedQuery = project query
+   in charikarLists (rand, numPermutations) projected radius (num, projectedQuery)
 
-numBits :: BitVector -> Int
-numBits (BitVector bits) = V.length bits
+rlshNN :: CharikarParamsStatic -> Distance a -> [a] -> RLSHParamsQuery ->
+          NNQuery a -> NNResponse
+rlshNN trainParams distance train (radius, numRescore) (num, query) =
+  take num $ sort $ zip distances candidates
+ where lsh = lshNN trainParams distance train radius (numRescore, query)
+       candidates = map snd lsh
+       train' = V.fromList train
+       distances = map (distance query) $ map ((V.!) train') candidates
 
-data Metric m => Hasher m = Hasher [(m, m)] deriving Show
+rlshNNAuto :: Distance a -> [a] -> NNQuery a -> NNResponse
+rlshNNAuto distance train =
+ let
+  rand = mkStdGen 0
+  dimension = 32
+  numPermutations = 8
+  numRescore = 2 * dimension
+  radius = ceiling $ (fromIntegral numRescore) / (fromIntegral numPermutations)
+ in
+  rlshNN (rand, numPermutations, dimension) distance train (radius, numRescore)
 
-mkHasherRandom :: Metric m => [m] -> Int -> (Hasher m)
-mkHasherRandom points dimension = Hasher (zip lefts rights)
-  where
-    randGen = mkStdGen 0
-    (subset, _) = randomSubset randGen (2 * dimension) points
-    lefts = take dimension subset
-    rights = drop dimension subset
-
-hash :: Metric m => Hasher m -> m -> BitVector
-hash (Hasher pairs) query =
-  mkBitVector [queryDistance left < queryDistance right | (left, right) <- pairs]
-  where
-    queryDistance = distance query
-
--- The constructor should be private.
-data CharikarList = CharikarList (V.Vector (BitVector, Int)) Permutation
-
-mkCharikarList :: [BitVector] -> Permutation -> CharikarList
-mkCharikarList bitVectors permutation = CharikarList sorted permutation
-  where
-    permuted = map (permute permutation) bitVectors
-    permutedWithIndex = zip permuted [0 ..]
-    sorted = V.fromList $ sortBy (comparing fst) permutedWithIndex
-
-nearestCharikarList :: CharikarList -> Int -> BitVector -> [Int]
-nearestCharikarList (CharikarList sorted permutation) radius query =
-  V.toList $ V.map snd $ truncateSlice (midpoint - radius) (midpoint + radius + 1) sorted
-  where
-    permuted = permute permutation query
-    midpoint = binarySearch sorted (permuted, -1)
-
-data CharikarLists = CharikarLists [CharikarList]
-
-mkCharikarLists :: [BitVector] -> Int -> CharikarLists
-mkCharikarLists xs numPermutations =
-  CharikarLists $ map (mkCharikarList xs) permutations
-  where
-    randGen = mkStdGen 0
-    numShuffle = numBits . head $ xs
-    permutationGen gen =
-      let (permutation, gen') = shuffle [0 .. numShuffle - 1] randGen
-      in (Permutation permutation) : (permutationGen gen')
-    permutations = take numPermutations $ permutationGen randGen
-
-nearestCharikarLists :: CharikarLists -> Int -> BitVector -> [Int]
-nearestCharikarLists (CharikarLists lists) radius query =
-  nub $ concatMap (\c -> nearestCharikarList c radius query) lists
-
-data Metric m => CharikarNN m = CharikarNN (V.Vector BitVector) (Hasher m) CharikarLists
-
-mkCharikarNN :: Metric m => [m] -> Int -> Int -> CharikarNN m
-mkCharikarNN points hashDimension numCharikarLists =
-  CharikarNN (V.fromList hashedPoints) hasher charikarLists
-  where
-    hasher = mkHasherRandom points hashDimension
-    hashedPoints = map (hash hasher) points
-    charikarLists = mkCharikarLists hashedPoints numCharikarLists
-
-nearestCharikarNN :: Metric m => CharikarNN m -> Int -> Int -> m -> [Int]
-nearestCharikarNN (CharikarNN points hasher lists) radius numNeighbors query =
-  take numNeighbors $ map snd $ sort $ zip distances candidates
-    where
-      hashedQuery = hash hasher query
-      candidates = nearestCharikarLists lists radius hashedQuery
-      distances = map (distance hashedQuery) $ map (points V.!) candidates
-
-data Metric m => RescoreNN m = RescoreNN (V.Vector m) (CharikarNN m)
-
-mkRescoreNN :: Metric m => [m] -> Int -> Int -> RescoreNN m
-mkRescoreNN points hashDimension numCharikarLists =
-  RescoreNN (V.fromList points) (mkCharikarNN points hashDimension numCharikarLists)
-
-nearestRescoreNN :: Metric m => RescoreNN m -> Int -> Int -> m -> (Double, Int)
-nearestRescoreNN (RescoreNN points matcher) radius numRescore query =
-  minimum $ zip distances candidates
-  where
-    candidates = nearestCharikarNN matcher radius numRescore query
-    distances = map (distance query) $ map (points V.!) candidates
-
-nearestRescoreNNAuto :: Metric m => RescoreNN m -> m -> (Double, Int)
-nearestRescoreNNAuto matcher = nearestRescoreNN matcher radius numRescore
-  where
-    numRescore = 64
-    radius = 8

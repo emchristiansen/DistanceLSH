@@ -1,20 +1,33 @@
 module Util (
   dataToVectors,
   regexFindAllIn,
-  L2Vector(L2Vector),
   slice,
   binarySearch,
   shuffle,
   randomSubset,
-  truncateSlice
+  truncateSlice,
+  mean,
+  fractionTrue,
+  BitVector,
+  mkBitVector,
+  Permutation,
+  mkPermutation,
+  mkPermutationWithGen,
+  numBits,
+  permute,
+  pair,
+  randList,
+  hammingDistance
 ) where
 
 --------------------------------------------------------------------------------
 
+import Control.Exception
 import Control.Monad
 import Control.Monad.ST
 import Data.Array.ST
 import Data.STRef
+import Data.List
 import qualified Data.Vector as V
 import System.Random
 import Text.Regex
@@ -22,6 +35,56 @@ import Text.Regex
 import Base
 
 --------------------------------------------------------------------------------
+
+randList :: StdGen -> [StdGen]
+randList gen = gen : (randList $ snd $ next gen)
+
+pair :: a -> b -> (a, b)
+pair x y = (x, y)
+
+data BitVector = BitVector (V.Vector Bool) deriving (Eq, Ord, Show)
+
+mkBitVector :: [Bool] -> BitVector
+mkBitVector = BitVector . V.fromList
+
+boolToInt :: Bool -> Int
+boolToInt True = 1
+boolToInt False = 0
+
+hammingDistance :: BitVector -> BitVector -> Int
+hammingDistance (BitVector xs) (BitVector ys) = V.sum disagreements
+ where disagreements = V.map boolToInt $ V.zipWith (/=) xs ys
+
+-- Private constructor.
+data Permutation = Permutation [Int]
+
+-- Verifies is actually a permutation.
+mkPermutation :: [Int] -> Permutation
+mkPermutation permutation =
+  assert(sorted == [0 .. (length permutation) - 1]) $
+  Permutation permutation
+  where
+    sorted = sort permutation
+
+mkPermutationWithGen :: StdGen -> Int -> Permutation
+mkPermutationWithGen rand n = mkPermutation shuffled
+ where shuffled = fst $ shuffle [0 .. n - 1] rand
+
+permute :: Permutation -> BitVector -> BitVector
+permute (Permutation permutation) (BitVector bits) =
+  mkBitVector [bits V.! i | i <- permutation]
+
+numBits :: BitVector -> Int
+numBits (BitVector bits) = V.length bits
+
+
+mean :: Fractional a => [a] -> a
+mean xs = (sum xs) / (fromIntegral $ length xs)
+
+fractionTrue :: [Bool] -> Double
+fractionTrue bs = numTrue / numTotal
+  where numTrue = fromIntegral $ length $ filter id bs
+        numTotal = fromIntegral $ length bs
 
 truncateSlice :: Int -> Int -> V.Vector a -> V.Vector a
 truncateSlice start end v = V.slice start' extent v
@@ -61,9 +124,9 @@ shuffle xs gen = runST (do
 slice :: [a] -> Int -> Int -> [a]
 slice xs from to = take (to - from) (drop from xs)
 
-dataToVectors :: String -> [L2Vector]
+dataToVectors :: String -> [[Double]]
 dataToVectors string =
-    map L2Vector doubleLists
+    doubleLists
   where
     regex = "(^|[ ,\t\n]+)([0-9\\.]+)($|[ ,\t\n]+)"
     stringsToDoubles = map (\x -> read x :: Double)
