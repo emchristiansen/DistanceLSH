@@ -6,11 +6,10 @@ module Main (
 
 import Base
 import LSH
+import IOUtil
 import Util
 
 import BenchmarkUtil
-
-import System.Random
 
 --------------------------------------------------------------------------------
 
@@ -23,7 +22,7 @@ main = do
 --  putStrLn $ show ret
 
   text <- readFile "/home/eric/Dropbox/haskell/mlsh/data/breast_cancer.data"
-  let vectors = dataToVectors text
+  let vectors = dataToDoubleLists text
 
 --  let test = head vectors
 --  let train = tail vectors

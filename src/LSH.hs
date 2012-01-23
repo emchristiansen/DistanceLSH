@@ -9,6 +9,7 @@ import qualified Data.Vector as V
 import System.Random
 
 import Base
+import RandomUtil
 import Util
 
 --------------------------------------------------------------------------------

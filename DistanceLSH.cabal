@@ -43,7 +43,7 @@ includes:
 install-includes:
 include-dirs:
 hs-source-dirs: src
-other-modules: BenchmarkUtil Base LSH Util
+other-modules: RandomUtil IOUtil BenchmarkUtil Base LSH Util
 ghc-prof-options:
 ghc-shared-options:
 ghc-options:
