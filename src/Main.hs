@@ -21,8 +21,8 @@ main = do
 --
 --  putStrLn $ show ret
 
-  text <- readFile "/home/eric/Dropbox/haskell/mlsh/data/breast_cancer.data"
-  let vectors = dataToDoubleLists text
+  text <- readFile "/home/eric/Dropbox/haskell/mlsh/data/letter-recognition.data"
+  let vectors = take 20000 $ dataToDoubleLists text
 
 --  let test = head vectors
 --  let train = tail vectors
