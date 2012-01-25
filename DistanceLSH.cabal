@@ -6,7 +6,7 @@ license: AllRightsReserved
 license-file: ""
 copyright:
 maintainer:
-build-depends: array -any, base -any, random -any,
+build-depends: array -any, base -any, deepseq -any, random -any,
                regex-compat -any, vector -any
 stability:
 homepage: https://github.com/emchristiansen/DistanceLSH
@@ -43,7 +43,7 @@ includes:
 install-includes:
 include-dirs:
 hs-source-dirs: src
-other-modules: Base Util IOUtil RandomUtil LSH BenchmarkUtil
+other-modules: Base BenchmarkUtil IOUtil LSH RandomUtil Util
 ghc-prof-options:
 ghc-shared-options:
 ghc-options:

@@ -24,20 +24,20 @@ breakIntoFolds foldDepth points =
    let pairs = breakIntoFolds (foldDepth - 1) containsTest
    in [(test, train ++ allTrain) | (test, train) <- pairs]
 
-benchmarkSingle :: NNMethod a -> Distance a -> ([a], [a]) -> Double
-benchmarkSingle method distance (test, train) =
+benchmarkSingle :: NNConstructor a b -> NNRunner a b -> Distance a -> ([a], [a]) -> Double
+benchmarkSingle mk use distance (test, train) =
   fractionTrue $ zipWith (==) golden estimated
  where
   golden =
    let brute = bruteNN distance train
    in map (brute . pair 1) test
   estimated =
-   let method' = method distance train
-   in map (method' . pair 1) test
+   let matcher = mk distance train
+   in map (use matcher . pair 1) test
 
-benchmark :: NNMethod a -> Distance a -> [a] -> Double
-benchmark method distance points = mean $ map method' splits
+benchmark :: NNConstructor a b -> NNRunner a b -> Distance a -> [a] -> Double
+benchmark mk use distance points = mean $ map method' splits
  where
-  method' = benchmarkSingle method distance
+  method' = benchmarkSingle mk use distance
   splits = breakIntoFolds 3 points
 

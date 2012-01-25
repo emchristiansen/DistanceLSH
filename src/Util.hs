@@ -2,7 +2,8 @@ module Util where
 
 --------------------------------------------------------------------------------
 
-import qualified Data.Vector as V
+import qualified Data.Vector as B
+import qualified Data.Vector.Unboxed as V
 
 import Base
 import IOUtil
@@ -25,11 +26,11 @@ fractionTrue bs = numTrue / numTotal
   where numTrue = fromIntegral $ length $ filter id bs
         numTotal = fromIntegral $ length bs
 
-truncateSlice :: Int -> Int -> V.Vector a -> V.Vector a
-truncateSlice start end v = V.slice start' extent v
+truncateSlice :: Int -> Int -> B.Vector a -> B.Vector a
+truncateSlice start end v = B.slice start' extent v
   where
     start' = max 0 start
-    end' = min (V.length v) end
+    end' = min (B.length v) end
     extent = end' - start'
 
 data BitVector = BitVector (V.Vector Bool) deriving (Eq, Ord, Show)
@@ -48,16 +49,16 @@ permute (Permutation permutation) (BitVector bits) =
 numBits :: BitVector -> Int
 numBits (BitVector bits) = V.length bits
 
-binarySearch :: Ord a => V.Vector a -> a -> Int
-binarySearch sorted query = helper 0 (V.length sorted)
+binarySearch :: Ord a => B.Vector a -> a -> Int
+binarySearch sorted query = helper 0 (B.length sorted)
   where
     -- Invariant: The insert-sort index is always included
     -- in [min, max] (inclusive).
     helper min max =
       if max == min + 1
-      then if query < sorted V.! min then min else max
+      then if query < sorted B.! min then min else max
       else
         let mid = (max + min) `div` 2 in
-        if query < sorted V.! mid then helper min mid
+        if query < sorted B.! mid then helper min mid
         else helper mid max
 

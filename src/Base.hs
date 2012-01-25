@@ -16,6 +16,9 @@ type NNResponse = [(Double, Int)]
 
 type NNMethod a = Distance a -> [a] -> NNQuery a -> NNResponse
 
+type NNConstructor a b = Distance a -> [a] -> b
+type NNRunner a b = b -> NNQuery a -> NNResponse
+
 bruteNN :: Distance a -> [a] -> NNQuery a -> NNResponse
 bruteNN distance points (num, query) = take num sorted
   where queryDistance = distance query

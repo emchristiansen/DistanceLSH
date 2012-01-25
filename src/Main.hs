@@ -29,7 +29,7 @@ main = do
 --
 --  let ret = rlshNNAuto l2Distance train (1, test)
 
-  let results = benchmark rlshNNAuto l2Distance vectors
+  let results = benchmark mkRLSHNNAuto useRLSHNNAuto l2Distance vectors
 
   putStrLn $ show results
 
