@@ -2,8 +2,8 @@ name: DistanceLSH
 version: 0.0.1
 cabal-version: -any
 build-type: Simple
-license: 
-license-file: 
+license: AllRightsReserved
+license-file: ""
 copyright:
 maintainer:
 build-depends: array -any, base -any, random -any,
@@ -46,7 +46,7 @@ hs-source-dirs: src
 other-modules: Base Util IOUtil RandomUtil LSH BenchmarkUtil
 ghc-prof-options:
 ghc-shared-options:
-ghc-options: -O2 -Wall
+ghc-options:
 hugs-options:
 nhc98-options:
 jhc-options:

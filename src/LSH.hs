@@ -15,72 +15,118 @@ import Util
 --------------------------------------------------------------------------------
 
 type CharikarListParamsStatic = StdGen
-type CharikarListsParamsStatic = (StdGen, NumPermutations)
-type CharikarParamsStatic = (StdGen, NumPermutations, Dimension)
-type LSHParamsQuery = Radius
-type RLSHParamsQuery = (Radius, NumRescore)
-
+type CharikarListStruct = (Permutation, V.Vector (BitVector, Int))
+type Radius = Int
+type CharikarParamsQuery = Radius
 type HNNResponse = [(Int, Int)]
 
-type Dimension = Int
-type NumPermutations = Int
-type Radius = Int
-type NumRescore = Int
+mkCharikarList :: CharikarListParamsStatic -> [BitVector] -> CharikarListStruct
+mkCharikarList rand train = (permutation, V.fromList $ sort $ zip permuted [0 ..])
+ where permutation = mkPermutationWithGen rand $ numBits $ head train
+       permuted = map (permute permutation) train
 
-charikarList :: CharikarListParamsStatic -> [BitVector] -> LSHParamsQuery ->
-                NNQuery BitVector -> HNNResponse
-charikarList rand train radius (num, query) = sort $ zip distances indices
+useCharikarList :: CharikarListStruct -> CharikarParamsQuery ->
+                   NNQuery BitVector -> HNNResponse
+useCharikarList (permutation, sorted) radius (num, query) =
+  sort $ zip distances indices
  where
-  numBits' = numBits $ head train
-  permute' = permute (mkPermutationWithGen rand numBits')
-  sorted = V.fromList $ sort $ zip (map permute' train) [0 ..]
-  midpoint = binarySearch sorted (permute' query, -1)
+  midpoint = binarySearch sorted (permute permutation query, -1)
   neighbors = truncateSlice (midpoint - radius) (midpoint + radius + 1) sorted
   (bitvectors, indices) = unzip $ V.toList $ neighbors
   distances = map (hammingDistance query) bitvectors
 
-charikarLists :: CharikarListsParamsStatic -> [BitVector] -> LSHParamsQuery ->
-                 NNQuery BitVector -> HNNResponse
-charikarLists (rand, numPermutations) train radius (num, query) =
- take num $ nub $ sort $ candidates
- where rands = take numPermutations $ randList rand
-       lists = map (\r -> charikarList r train) rands
-       keepAll = 2 * radius + 1
-       query' = (keepAll, query)
-       candidates = concatMap (\l -> l radius query') lists
+charikarList :: CharikarListParamsStatic -> [BitVector] -> CharikarParamsQuery ->
+                NNQuery BitVector -> HNNResponse
+charikarList rand train = useCharikarList (mkCharikarList rand train)
 
-lshNN :: CharikarParamsStatic -> Distance a -> [a] -> LSHParamsQuery ->
-         NNQuery a -> HNNResponse
-lshNN (rand, numPermutations, dimension) distance train radius (num, query) =
- charikar
+--------------------------------------------------------------------------------
+
+type NumPermutations = Int
+type CharikarListsParamsStatic = (StdGen, NumPermutations)
+type CharikarListsStruct = [CharikarListStruct]
+
+mkCharikarLists :: CharikarListsParamsStatic -> [BitVector] -> CharikarListsStruct
+mkCharikarLists (rand, numPermutations) train =
+  map ($ train) $ map mkCharikarList rands
+ where rands = take numPermutations $ randList rand
+
+useCharikarLists :: CharikarListsStruct -> CharikarParamsQuery ->
+                    NNQuery BitVector -> HNNResponse
+useCharikarLists lists radius (num, query) = take num $ nub $ sort candidates
+ where needsList list = useCharikarList list radius (2 * radius + 1, query)
+       candidates = concatMap needsList lists
+
+charikarLists :: CharikarListsParamsStatic -> [BitVector] -> CharikarParamsQuery ->
+                 NNQuery BitVector -> HNNResponse
+charikarLists params train = useCharikarLists (mkCharikarLists params train)
+
+--------------------------------------------------------------------------------
+
+type Dimension = Int
+type Projection a = [(a, a)]
+type CharikarParamsStatic = (StdGen, NumPermutations, Dimension)
+type LSHNNStruct a = (Distance a, Projection a, CharikarListsStruct)
+
+project :: Distance a -> Projection a -> a -> BitVector
+project distance projection point =
+  mkBitVector [distance point left < distance point right | (left, right) <- projection]
+
+mkLSHNN :: CharikarParamsStatic -> Distance a -> [a] -> LSHNNStruct a
+mkLSHNN (rand, numPermutations, dimension) distance train =
+  (distance, projection, lists)
  where
-  project point =
+  projection =
    let randomSubset' = fst $ randomSubset rand (2 * dimension) train
        (lefts, rights) = splitAt dimension randomSubset'
-       projection = zip lefts rights
-   in mkBitVector [distance point left < distance point right | (left, right) <- projection]
-  charikar =
-   let projected = map project train
-       projectedQuery = project query
-   in charikarLists (rand, numPermutations) projected radius (num, projectedQuery)
+   in zip lefts rights
+  projectedTrain = map (project distance projection) train
+  lists = mkCharikarLists (rand, numPermutations) projectedTrain
+
+useLSHNN :: LSHNNStruct a -> CharikarParamsQuery -> NNQuery a -> HNNResponse
+useLSHNN (distance, projection, lists) radius (num, query) =
+  take num $ nub $ sort candidates
+ where projectedQuery = project distance projection query
+       takeAll = (length lists) * (2 * radius + 1)
+       candidates = useCharikarLists lists radius (takeAll, projectedQuery)
+
+lshNN :: CharikarParamsStatic -> Distance a -> [a] -> CharikarParamsQuery ->
+         NNQuery a -> HNNResponse
+lshNN params distance train = useLSHNN (mkLSHNN params distance train)
+
+--------------------------------------------------------------------------------
+
+type NumRescore = Int
+type RLSHNNStruct a = (LSHNNStruct a, V.Vector a)
+type RLSHParamsQuery = (Radius, NumRescore)
+
+mkRLSHNN :: CharikarParamsStatic -> Distance a -> [a] -> RLSHNNStruct a
+mkRLSHNN params distance train = (mkLSHNN params distance train, V.fromList train)
+
+useRLSHNN :: RLSHNNStruct a -> RLSHParamsQuery -> NNQuery a -> NNResponse
+useRLSHNN (lsh@(distance, _, _), train) (radius, numRescore) (num, query) =
+  take num $ nub $ sort $ zip distances candidates
+ where candidates = map snd $ useLSHNN lsh radius (numRescore, query)
+       distances = map (distance query) $ map ((V.!) train) candidates
 
 rlshNN :: CharikarParamsStatic -> Distance a -> [a] -> RLSHParamsQuery ->
           NNQuery a -> NNResponse
-rlshNN trainParams distance train (radius, numRescore) (num, query) =
-  take num $ sort $ zip distances candidates
- where lsh = lshNN trainParams distance train radius (numRescore, query)
-       candidates = map snd lsh
-       train' = V.fromList train
-       distances = map (distance query) $ map ((V.!) train') candidates
+rlshNN params distance train = useRLSHNN (mkRLSHNN params distance train)
+
+mkRLSHNNAuto :: Distance a -> [a] -> RLSHNNStruct a
+mkRLSHNNAuto = mkRLSHNN params
+ where rand = mkStdGen 0
+       dimension = 32
+       numPermutations = 8
+       params = (rand, numPermutations, dimension)
+
+useRLSHNNAuto :: RLSHNNStruct a -> NNQuery a -> NNResponse
+useRLSHNNAuto struct@((distance, projection, lists), _) = useRLSHNN struct params
+  where dimension = length projection
+        numPermutations = length lists
+        numRescore = 2 * dimension
+        radius = ceiling $ (fromIntegral numRescore) / (fromIntegral numPermutations)
+        params = (radius, numRescore)
 
 rlshNNAuto :: Distance a -> [a] -> NNQuery a -> NNResponse
-rlshNNAuto distance train =
- let
-  rand = mkStdGen 0
-  dimension = 32
-  numPermutations = 8
-  numRescore = 2 * dimension
-  radius = ceiling $ (fromIntegral numRescore) / (fromIntegral numPermutations)
- in
-  rlshNN (rand, numPermutations, dimension) distance train (radius, numRescore)
+rlshNNAuto distance train = useRLSHNNAuto (mkRLSHNNAuto distance train)
 
