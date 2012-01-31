@@ -3,15 +3,13 @@ module RandomUtil where
 --------------------------------------------------------------------------------
 
 import Control.Exception
-import Control.Monad
-import Control.Monad.ST
-import Data.Array.ST
-import Data.STRef
 import Data.List
 import System.Random
+import System.Random.Shuffle
 
 --------------------------------------------------------------------------------
 
+-- An infinite list of random generators.
 randList :: StdGen -> [StdGen]
 randList gen = gen : (randList $ snd $ next gen)
 
@@ -26,34 +24,8 @@ mkPermutation permutation =
 
 mkPermutationWithGen :: StdGen -> Int -> Permutation
 mkPermutationWithGen rand n = mkPermutation shuffled
- where shuffled = fst $ shuffle [0 .. n - 1] rand
+ where shuffled = shuffle' [0 .. n - 1]  n rand
 
-randomSubset :: StdGen -> Int -> [a] -> ([a], StdGen)
-randomSubset gen n xs = (take n shuffled, gen')
- where (shuffled, gen') = shuffle xs gen
-
--- Copy-pasted from http://www.haskell.org/haskellwiki/Random_shuffle
-shuffle :: [a] -> StdGen -> ([a], StdGen)
-shuffle xs gen = runST (do
-        g <- newSTRef gen
-        let randomRST lohi = do
-              (a,s') <- liftM (randomR lohi) (readSTRef g)
-              writeSTRef g s'
-              return a
-        ar <- newArray n xs
-        xs' <- forM [1..n] $ \i -> do
-                j <- randomRST (i,n)
-                vi <- readArray ar i
-                vj <- readArray ar j
-                writeArray ar j vi
-                return vj
-        gen' <- readSTRef g
-        return (xs',gen'))
-  where
-    n = length xs
-    newArray :: Int -> [a] -> ST s (STArray s Int a)
-    newArray n xs =  newListArray (1,n) xs
-
-
-
-
+randomSubset :: StdGen -> Int -> [a] -> [a]
+randomSubset gen n xs = assert (length shuffled >= n) $ take n shuffled
+ where shuffled = shuffle' xs (length xs) gen

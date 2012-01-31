@@ -4,50 +4,57 @@ module Main (
 
 --------------------------------------------------------------------------------
 
+import qualified Data.Vector.Unboxed as V
+import System.Environment
+
 import Base
+import Control.Exception
 import LSH
 import IOUtil
-import Util
+--import Util
 
 import BenchmarkUtil
 
+import qualified Data.Map as M
+
+
 --------------------------------------------------------------------------------
 
-main = do
---  let train = [mkBitVector [False, False], mkBitVector [True, False]]
---  let test = mkBitVector [True, True]
---  let rand = mkStdGen 0
---  let ret = charikarLists (rand, 10) train 2 (1, test)
+
+main = do let pat = "*_000*.png"
+          let distanceExecutable = "/home/eric/Dropbox/python/imagedistance/src/l2distance.py"
+--          let dir = "/home/eric/macroot/Volumes/H1/MultiPIE/data/session01/multiview"
+--          let dir = "/home/eric/Dropbox/python/extract_image_patches/data"
+          let dir = "/home/eric/delme"
+          files <- findGlobRecursive pat dir
+
+          distanceMap <- externalDistanceMap distanceExecutable files True
+          let distance = mapToDistance distanceMap
+
+--          let f0 = files !! 0
+--          let f1 = files !! 1
 --
---  putStrLn $ show ret
+--          putStrLn $ show $ distance f0 f1
+--          putStrLn $ "here"
+--          putStrLn $ show $ distance f0 f1
+--          putStrLn $ show $ distance f0 f0
 
-  text <- readFile "/home/eric/Dropbox/haskell/mlsh/data/letter-recognition.data"
-  let vectors = take 20000 $ dataToDoubleLists text
+--          let results = benchmark mkBruteNN useBruteNN distance files
+          let results = benchmark mkRLSHNNAuto useRLSHNNAuto distance files
 
---  let test = head vectors
---  let train = tail vectors
+          putStrLn $ show results
+
+--main :: IO ()
+--main = do
 --
---  let ret = rlshNNAuto l2Distance train (1, test)
-
-  let results = benchmark mkRLSHNNAuto useRLSHNNAuto l2Distance vectors
-
-  putStrLn $ show results
-
---  let brute = BruteNN vectors
---  let lsh = mkRescoreNN vectors 32 8
+--  text <- readFile "/home/eric/Dropbox/haskell/mlsh/data/letter-recognition.data"
+--  let vectors = map V.fromList $ take 500 $ dataToDoubleLists text
 --
---  let v10 = vectors !! 10
+--  let distanceMap = distanceToMap l2DistanceUnboxed vectors
+--  let distance = mapToDistance distanceMap
 --
---  let radius = 2
---  let numRescore = 8
---  let (dist, ind) = nearestRescoreNN lsh radius numRescore v10
---  putStrLn $ show ind
---  putStrLn $ show dist
-
---  let asLines = lines text
---  let line0 = asLines !! 0
---  let padded = " " ++ line0 ++ " "
---  let nums = regexFindAllIn "(^|[ ,\t\n]+)([0-9\\.]+)($|[ ,\t\n]+)" 1 padded
---  sequence_ $ map putStrLn nums
---  sequence_ $ map (putStrLn . show) (dataToVectors text)
+--
+--  let results = benchmark mkRLSHNNAuto useRLSHNNAuto distance vectors
+--
+--  putStrLn $ show results
 

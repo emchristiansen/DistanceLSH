@@ -29,7 +29,7 @@ mkCharikarList rand train = (permutation, B.fromList $ sort $ zip permuted [0 ..
 useCharikarList :: CharikarListStruct -> CharikarParamsQuery ->
                    NNQuery BitVector -> HNNResponse
 useCharikarList (permutation, sorted) radius (num, query) =
-  sort $ zip distances indices
+  take num $ sort $ zip distances indices
  where
   midpoint = binarySearch sorted (permute permutation query, -1)
   neighbors = truncateSlice (midpoint - radius) (midpoint + radius + 1) sorted
@@ -77,7 +77,7 @@ mkLSHNN (rand, numPermutations, dimension) distance train =
   (distance, projection, lists)
  where
   projection =
-   let randomSubset' = fst $ randomSubset rand (2 * dimension) train
+   let randomSubset' = randomSubset rand (2 * dimension) train
        (lefts, rights) = splitAt dimension randomSubset'
    in zip lefts rights
   projectedTrain = map (project distance projection) train
@@ -116,12 +116,14 @@ rlshNN params distance train = useRLSHNN (mkRLSHNN params distance train)
 mkRLSHNNAuto :: Distance a -> [a] -> RLSHNNStruct a
 mkRLSHNNAuto = mkRLSHNN params
  where rand = mkStdGen 0
-       dimension = 64
+       dimension = 8
        numPermutations = 16
+--       dimension = 64
+--       numPermutations = 16
        params = (rand, numPermutations, dimension)
 
 useRLSHNNAuto :: RLSHNNStruct a -> NNQuery a -> NNResponse
-useRLSHNNAuto struct@((distance, projection, lists), _) = useRLSHNN struct params
+useRLSHNNAuto struct@((_, projection, lists), _) = useRLSHNN struct params
  where dimension = length projection
        numPermutations = length lists
        numRescore = 2 * dimension
