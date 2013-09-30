@@ -1,6 +1,7 @@
 Warning: pre-alpha code
 
-Performs approximate nearest neighbor given just a distance function using a locality sensitive hashing (LSH) inspired technique. The underlying data does not need to be embedded in a vector space (unlike conventional LSH), and the distance function doesn't even have to be a metric / bregman divergence / etc (though I'm not sure what happens with non-metric distances).
+Performs approximate nearest neighbor given just a distance function using a locality sensitive hashing (LSH) inspired technique. 
+The underlying data does not need to be embedded in a vector space (unlike conventional LSH), and the distance function only needs to be a metric.
 
 To build:
 
